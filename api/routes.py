@@ -193,37 +193,53 @@ def sync_scrape(
 def selenium_scrape(
     request: ScrapeProfileRequest
 ):
-    """Scrape LinkedIn profile using Selenium (works with Python 3.12 on Windows)"""
+    """Scrape LinkedIn profile using Selenium (compatible with Selenium 4.5.0)"""
     from scraper.selenium_scraper import LinkedInSeleniumScraper
     import os
     import traceback
+    import time
     
     profile_url = str(request.profile_url)
     
     try:
+        print(f"DEBUG: Starting scrape for {profile_url}")
+        
         # Initialize scraper
         scraper = LinkedInSeleniumScraper()
+        print(f"DEBUG: Initializing browser...")
         scraper.initialize()
+        print(f"DEBUG: Browser initialized successfully")
         
         # Get credentials from env
         email = os.getenv("LINKEDIN_EMAIL")
         password = os.getenv("LINKEDIN_PASSWORD")
         
+        print(f"DEBUG: Using LinkedIn email: {email[:3]}***{email[-4:] if email and len(email) > 7 else ''}")
+        
         if not email or not password:
+            print("DEBUG: LinkedIn credentials missing in environment variables")
             raise Exception("LinkedIn credentials not found. Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD in .env")
         
         # Login with credentials
+        print(f"DEBUG: Attempting login...")
         login_success = scraper.login(email, password)
+        print(f"DEBUG: Login success: {login_success}")
         
         if not login_success:
             raise Exception("LinkedIn login failed. Check credentials or security verification.")
         
+        # Give a moment for session to stabilize
+        time.sleep(3)
+        
         # Scrape profile
+        print(f"DEBUG: Scraping profile...")
         profile_data = scraper.scrape_profile(profile_url)
+        print(f"DEBUG: Profile data retrieved: {profile_data}")
         
         # Close browser
         scraper.close()
         
+        print("DEBUG: Scraping completed successfully")
         return profile_data
         
     except Exception as e:
@@ -231,6 +247,9 @@ def selenium_scrape(
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+        
+        print(f"DEBUG ERROR: {str(e)}")
+        print(traceback.format_exc())
         
         # Try to close browser if it was initialized
         if 'scraper' in locals():
@@ -240,3 +259,16 @@ def selenium_scrape(
                 pass
                 
         raise HTTPException(status_code=500, detail=error_detail)
+
+
+# Add a simple test endpoint that doesn't require browser automation
+@router.get("/test")
+def test_endpoint():
+    return {
+        "status": "LinkedIn scraper API is running",
+        "time": str(datetime.datetime.now()),
+        "credentials": {
+            "email_available": bool(os.getenv("LINKEDIN_EMAIL")),
+            "password_available": bool(os.getenv("LINKEDIN_PASSWORD"))
+        }
+    }
