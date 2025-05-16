@@ -30,28 +30,34 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Import Google's signing key
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
-
-# Install specific Chrome version (114)
-RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_114.0.5735.198-1_amd64.deb \
+# Install Chrome using the Chrome repo
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
     && apt-get update \
-    && apt-get install -y ./google-chrome-stable_114.0.5735.198-1_amd64.deb \
-    && rm google-chrome-stable_114.0.5735.198-1_amd64.deb \
+    && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Print Chrome version for debugging
-RUN google-chrome --version
-
-# Install matching ChromeDriver
-RUN wget -q "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip" \
-    && unzip chromedriver_linux64.zip \
-    && mv chromedriver /usr/local/bin/chromedriver \
+# Get Chrome version and install matching ChromeDriver
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
+    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}.0.5035.74/linux64/chromedriver-linux64.zip" \
+    && unzip chromedriver-linux64.zip \
+    && mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
     && chmod +x /usr/local/bin/chromedriver \
-    && rm chromedriver_linux64.zip
+    && rm -rf chromedriver-linux64 chromedriver-linux64.zip
 
-# Print chromedriver version for debugging
-RUN chromedriver --version
+# Fallback to a known-working ChromeDriver if the above fails
+RUN if [ ! -f /usr/local/bin/chromedriver ]; then \
+    echo "Fallback to known-working ChromeDriver version" \
+    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/123.0.6312.86/linux64/chromedriver-linux64.zip" \
+    && unzip chromedriver-linux64.zip \
+    && mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm -rf chromedriver-linux64 chromedriver-linux64.zip; \
+    fi
+
+# Print versions for debugging
+RUN echo "Chrome version:" && google-chrome --version \
+    && echo "ChromeDriver version:" && chromedriver --version
 
 # Set display port to avoid crash
 ENV DISPLAY=:99
