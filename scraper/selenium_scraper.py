@@ -23,48 +23,27 @@ class LinkedInSeleniumScraper:
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
     def initialize(self):
-        """Initialize the browser for Render environment"""
-        logger.info("Initializing browser")
+        """Initialize the browser using webdriver-manager"""
+        logger.info("Initializing browser with webdriver-manager")
         
-        # Print system information for debugging
+        from webdriver_manager.chrome import ChromeDriverManager
+        # from webdriver_manager.core.utils import ChromeType # Not used in this version
         import platform
-        import subprocess
+        
         logger.info(f"OS: {platform.platform()}")
         logger.info(f"Python: {platform.python_version()}")
         
-        # Try to find chromedriver location
-        try:
-            chromedriver_path = subprocess.check_output(["which", "chromedriver"]).decode().strip()
-            logger.info(f"Found chromedriver at: {chromedriver_path}")
-        except:
-            # Default paths to check
-            chromedriver_path = "/usr/bin/chromedriver"
-            logger.info(f"Defaulting to chromedriver path: {chromedriver_path}")
-            
-        # Try to find chrome location
-        try:
-            chrome_path = subprocess.check_output(["which", "google-chrome-stable"]).decode().strip()
-            logger.info(f"Found Chrome at: {chrome_path}")
-        except:
-            chrome_path = "/usr/bin/google-chrome-stable"
-            logger.info(f"Defaulting to Chrome path: {chrome_path}")
-        
         options = Options()
         if self.headless:
-            options.add_argument("--headless=new")  # Updated headless argument
+            options.add_argument("--headless=new")
         
-        # Enhanced anti-detection measures
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-notifications")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-gpu")
+        # Enhanced options for Render environment
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-extensions")
         options.add_argument("--disable-blink-features=AutomationControlled")
-        
-        # Set binary location if found
-        if os.path.exists(chrome_path):
-            options.binary_location = chrome_path
         
         # For Selenium 4.5.0 compatibility
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -74,14 +53,16 @@ class LinkedInSeleniumScraper:
         os.makedirs("screenshots", exist_ok=True)
         
         try:
-            # Create Service object with explicit path
-            service = Service(executable_path=chromedriver_path)
-            logger.info(f"Initializing Chrome with service path: {chromedriver_path}")
+            # Use webdriver-manager to handle driver installation
+            # from selenium.webdriver.chrome.service import Service # Already imported at top
             
-            # Initialize with service object
+            # Let webdriver-manager install the driver automatically
+            service = Service(ChromeDriverManager().install())
+            logger.info(f"Driver installed at: {service.path}")
+            
+            # Initialize driver with service
             self.driver = webdriver.Chrome(service=service, options=options)
-            
-            logger.info("Chrome initialized successfully")
+            logger.info("Chrome initialized successfully with webdriver-manager")
             
             # Set script to disable webdriver detection
             self.driver.execute_script("""
@@ -93,31 +74,20 @@ class LinkedInSeleniumScraper:
             return True
         except Exception as e:
             logger.error(f"Error initializing Chrome: {e}")
-            # If we have detailed error info, add it to logs
-            if hasattr(e, 'msg'):
-                logger.error(f"Error message: {e.msg}")
-            
-            # Try alternative path for chromedriver
+            # Try with explicit cache_valid_range
             try:
-                logger.info("Trying alternative chromedriver path...")
-                alternative_paths = [
-                    "/usr/local/bin/chromedriver",
-                    "/usr/lib/chromium-browser/chromedriver",
-                    "/snap/bin/chromedriver"
-                ]
+                logger.info("Trying with explicit cache_valid_range...")
+                # from webdriver_manager.chrome import ChromeDriverManager # Already imported
+                from webdriver_manager.core.driver_cache import DriverCacheManager
                 
-                for alt_path in alternative_paths:
-                    if os.path.exists(alt_path):
-                        logger.info(f"Found alternative chromedriver at: {alt_path}")
-                        service = Service(executable_path=alt_path)
-                        self.driver = webdriver.Chrome(service=service, options=options)
-                        logger.info("Chrome initialized successfully with alternative path")
-                        return True
-            except Exception as alt_e:
-                logger.error(f"Alternative initialization also failed: {alt_e}")
-            
-            # Raise original exception
-            raise e
+                cache_manager = DriverCacheManager()
+                service = Service(ChromeDriverManager(cache_manager=cache_manager, cache_valid_range=1).install())
+                self.driver = webdriver.Chrome(service=service, options=options)
+                logger.info("Chrome initialized with explicit cache settings")
+                return True
+            except Exception as retry_e:
+                logger.error(f"Retry initialization failed: {retry_e}")
+                raise e
 
     def login(self, email, password):
         """Login to LinkedIn with provided credentials"""
