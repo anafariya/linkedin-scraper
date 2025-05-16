@@ -30,25 +30,27 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome using the Chrome repo
+# Install Chrome
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Get Chrome version and install matching ChromeDriver
-RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
-    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}.0.5035.74/linux64/chromedriver-linux64.zip" \
+# Print Chrome version
+RUN google-chrome --version
+
+# Install ChromeDriver 136
+RUN wget -q "https://storage.googleapis.com/chrome-for-testing-public/136.0.7103.113/linux64/chromedriver-linux64.zip" \
     && unzip chromedriver-linux64.zip \
     && mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
     && chmod +x /usr/local/bin/chromedriver \
     && rm -rf chromedriver-linux64 chromedriver-linux64.zip
 
-# Fallback to a known-working ChromeDriver if the above fails
-RUN if [ ! -f /usr/local/bin/chromedriver ]; then \
-    echo "Fallback to known-working ChromeDriver version" \
-    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/123.0.6312.86/linux64/chromedriver-linux64.zip" \
+# Fallback to another ChromeDriver version if the above fails
+RUN if [ ! -f /usr/local/bin/chromedriver ] || [ ! -x /usr/local/bin/chromedriver ]; then \
+    echo "Fallback to alternative ChromeDriver version" \
+    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/136.0.7103.113/linux64/chromedriver-linux64.zip" \
     && unzip chromedriver-linux64.zip \
     && mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
     && chmod +x /usr/local/bin/chromedriver \
