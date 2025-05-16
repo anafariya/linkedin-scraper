@@ -28,16 +28,33 @@ class LinkedInSeleniumScraper:
         
         # Print system information for debugging
         import platform
+        import subprocess
         logger.info(f"OS: {platform.platform()}")
         logger.info(f"Python: {platform.python_version()}")
         
+        # Try to find chromedriver location
+        try:
+            chromedriver_path = subprocess.check_output(["which", "chromedriver"]).decode().strip()
+            logger.info(f"Found chromedriver at: {chromedriver_path}")
+        except:
+            # Default paths to check
+            chromedriver_path = "/usr/bin/chromedriver"
+            logger.info(f"Defaulting to chromedriver path: {chromedriver_path}")
+            
+        # Try to find chrome location
+        try:
+            chrome_path = subprocess.check_output(["which", "google-chrome-stable"]).decode().strip()
+            logger.info(f"Found Chrome at: {chrome_path}")
+        except:
+            chrome_path = "/usr/bin/google-chrome-stable"
+            logger.info(f"Defaulting to Chrome path: {chrome_path}")
+        
         options = Options()
         if self.headless:
-            options.add_argument("--headless=new")  # Updated headless argument for newer Chrome
+            options.add_argument("--headless=new")  # Updated headless argument
         
         # Enhanced anti-detection measures
-        options.add_argument("--window-size=1920,1080")  # Larger window size
-        options.add_argument("--start-maximized")
+        options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-gpu")
@@ -45,13 +62,9 @@ class LinkedInSeleniumScraper:
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
         
-        # Random user agent to avoid detection
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
-        ]
-        options.add_argument(f"--user-agent={random.choice(user_agents)}")
+        # Set binary location if found
+        if os.path.exists(chrome_path):
+            options.binary_location = chrome_path
         
         # For Selenium 4.5.0 compatibility
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -61,24 +74,12 @@ class LinkedInSeleniumScraper:
         os.makedirs("screenshots", exist_ok=True)
         
         try:
-            # Check for Chrome binary in common locations
-            chrome_binary_locations = [
-                "/usr/bin/google-chrome-stable",  # Standard Linux location
-                "/usr/bin/google-chrome",         # Alternative Linux location
-                "/usr/bin/chromium-browser",      # Chromium location
-                "/usr/bin/chromium"               # Alternative Chromium
-            ]
+            # Create Service object with explicit path
+            service = Service(executable_path=chromedriver_path)
+            logger.info(f"Initializing Chrome with service path: {chromedriver_path}")
             
-            # Check which binary locations exist
-            for location in chrome_binary_locations:
-                if os.path.exists(location):
-                    logger.info(f"Found Chrome binary at: {location}")
-                    options.binary_location = location
-                    break
-            
-            # Direct Chrome initialization (avoiding ChromeDriverManager)
-            logger.info("Initializing Chrome directly...")
-            self.driver = webdriver.Chrome(options=options)
+            # Initialize with service object
+            self.driver = webdriver.Chrome(service=service, options=options)
             
             logger.info("Chrome initialized successfully")
             
@@ -96,7 +97,26 @@ class LinkedInSeleniumScraper:
             if hasattr(e, 'msg'):
                 logger.error(f"Error message: {e.msg}")
             
-            # Raise for proper handling
+            # Try alternative path for chromedriver
+            try:
+                logger.info("Trying alternative chromedriver path...")
+                alternative_paths = [
+                    "/usr/local/bin/chromedriver",
+                    "/usr/lib/chromium-browser/chromedriver",
+                    "/snap/bin/chromedriver"
+                ]
+                
+                for alt_path in alternative_paths:
+                    if os.path.exists(alt_path):
+                        logger.info(f"Found alternative chromedriver at: {alt_path}")
+                        service = Service(executable_path=alt_path)
+                        self.driver = webdriver.Chrome(service=service, options=options)
+                        logger.info("Chrome initialized successfully with alternative path")
+                        return True
+            except Exception as alt_e:
+                logger.error(f"Alternative initialization also failed: {alt_e}")
+            
+            # Raise original exception
             raise e
 
     def login(self, email, password):
