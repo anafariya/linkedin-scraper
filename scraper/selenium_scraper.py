@@ -23,49 +23,81 @@ class LinkedInSeleniumScraper:
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
     def initialize(self):
-        """Initialize the browser"""
-        logger.info("Initializing browser")
+     """Initialize the browser for Render environment"""
+    logger.info("Initializing browser")
+    
+    # Print system information for debugging
+    import platform
+    logger.info(f"OS: {platform.platform()}")
+    logger.info(f"Python: {platform.python_version()}")
+    
+    options = Options()
+    if self.headless:
+        options.add_argument("--headless=new")  # Updated headless argument for newer Chrome
+    
+    # Enhanced anti-detection measures
+    options.add_argument("--window-size=1920,1080")  # Larger window size
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Random user agent to avoid detection
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
+    ]
+    options.add_argument(f"--user-agent={random.choice(user_agents)}")
+    
+    # For Selenium 4.5.0 compatibility
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    # Create screenshots directory
+    os.makedirs("screenshots", exist_ok=True)
+    
+    try:
+        # Check for Chrome binary in common locations
+        chrome_binary_locations = [
+            "/usr/bin/google-chrome-stable",  # Standard Linux location
+            "/usr/bin/google-chrome",         # Alternative Linux location
+            "/usr/bin/chromium-browser",      # Chromium location
+            "/usr/bin/chromium"               # Alternative Chromium
+        ]
         
-        options = Options()
-        if self.headless:
-            options.add_argument("--headless")  # Older version uses --headless not --headless=new
+        # Check which binary locations exist
+        for location in chrome_binary_locations:
+            if os.path.exists(location):
+                logger.info(f"Found Chrome binary at: {location}")
+                options.binary_location = location
+                break
         
-        options.add_argument("--window-size=1600,1200")  # Larger window size for better content loading
-        options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-blink-features=AutomationControlled")  # Helps avoid detection
+        # Direct Chrome initialization (avoiding ChromeDriverManager)
+        logger.info("Initializing Chrome directly...")
+        self.driver = webdriver.Chrome(options=options)
         
-        # For Selenium 4.5.0 compatibility
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
+        logger.info("Chrome initialized successfully")
         
-        # Create screenshots directory
-        os.makedirs("screenshots", exist_ok=True)
+        # Set script to disable webdriver detection
+        self.driver.execute_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => false,
+        });
+        """)
         
-        try:
-            # Use Service class from selenium 4.5.0
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=options)
-            
-            # Set script to disable webdriver detection
-            self.driver.execute_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => false,
-            });
-            """)
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error initializing Chrome: {e}")
-            # Fall back to direct Chrome initialization if ChromeDriverManager fails
-            try:
-                self.driver = webdriver.Chrome(options=options)
-                return True
-            except Exception as inner_e:
-                logger.error(f"Fallback initialization also failed: {inner_e}")
-                raise e
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing Chrome: {e}")
+        # If we have detailed error info, add it to logs
+        if hasattr(e, 'msg'):
+            logger.error(f"Error message: {e.msg}")
         
+        # Raise for proper handling
+        raise e
     def login(self, email, password):
         """Login to LinkedIn with provided credentials"""
         try:
@@ -434,69 +466,190 @@ class LinkedInSeleniumScraper:
         return experiences
     
     def extract_education(self):
-        """Extract education information"""
+        """Extract education information for LinkedIn's modern layout without any hardcoding"""
         education = []
         
         try:
-            # Find education section
-            edu_section_xpaths = [
-                "//section[.//div[contains(text(), 'Education')]]",
-                "//section[contains(@class, 'education-section')]",
-                "//section[contains(@id, 'education-section')]"
-            ]
+            # Find the Education section by heading
+            education_section_xpath = "//section[.//div[text()='Education']] | //div[h2[text()='Education']] | //div[preceding-sibling::h2[text()='Education']]"
             
-            edu_section = None
-            for xpath in edu_section_xpaths:
-                try:
-                    edu_section = self.driver.find_element(By.XPATH, xpath)
-                    break
-                except NoSuchElementException:
-                    continue
+            # Try to find education section
+            try:
+                education_section = self.driver.find_element(By.XPATH, education_section_xpath)
+                logger.info("Found education section")
+            except NoSuchElementException:
+                # Try a more generic approach - find any section that contains "Education" text
+                sections = self.driver.find_elements(By.XPATH, "//section | //div[contains(@class, 'pvs-list')]")
+                education_section = None
+                for section in sections:
+                    if "Education" in section.text:
+                        education_section = section
+                        logger.info("Found education section by text content")
+                        break
             
-            if edu_section:
-                # Try to find education list items
-                edu_items = edu_section.find_elements(By.XPATH, ".//li")
+            if education_section:
+                # Take a screenshot for debugging
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", education_section)
+                time.sleep(1)
+                self.driver.save_screenshot("screenshots/education_section.png")
                 
-                # Process each item
-                for item in edu_items:
+                # Try multiple approaches to find education items
+                education_items = []
+                
+                # Approach 1: Look for list items in the education section
+                try:
+                    items = education_section.find_elements(By.XPATH, ".//li")
+                    if items and len(items) > 0:
+                        education_items = items
+                        logger.info(f"Found {len(items)} education items using list items approach")
+                except Exception as e:
+                    logger.debug(f"Error finding education list items: {e}")
+                
+                # Approach 2: Look for div elements that contain images (school logos)
+                if not education_items:
                     try:
+                        items = education_section.find_elements(By.XPATH, ".//div[.//img]")
+                        if items and len(items) > 0:
+                            education_items = items
+                            logger.info(f"Found {len(items)} education items using image approach")
+                    except Exception as e:
+                        logger.debug(f"Error finding education items with images: {e}")
+                
+                # Approach 3: Look for display-flex divs that could be education entries
+                if not education_items:
+                    try:
+                        items = education_section.find_elements(By.XPATH, ".//div[contains(@class, 'display-flex')]")
+                        if items and len(items) > 0:
+                            # Filter items that are too small to be education entries
+                            education_items = [item for item in items if len(item.text.strip()) > 20]
+                            logger.info(f"Found {len(education_items)} education items using display-flex approach")
+                    except Exception as e:
+                        logger.debug(f"Error finding display-flex education items: {e}")
+                
+                # Process each education item
+                for item in education_items:
+                    try:
+                        # Skip items with minimal text (likely not education entries)
+                        if len(item.text.strip()) < 15:  # A real education entry would have more text
+                            continue
+                        
                         edu_entry = {}
+                        item_text = item.text.strip()
+                        logger.debug(f"Processing education item: {item_text[:100]}...")
                         
-                        # Try to extract school, degree, dates
-                        school = ""
-                        degree = ""
-                        dates = ""
+                        # Extract school name - multiple approaches
                         
-                        # Try various selectors for school
+                        # Approach 1: Look for the main heading or title
                         try:
-                            school = item.find_element(By.XPATH, ".//h3 | .//div[contains(@class, 'pv-entity__school-name')]").text.strip()
-                        except Exception:
-                            pass
+                            heading_elements = item.find_elements(By.XPATH, 
+                                ".//span[contains(@class, 'primary-text')] | .//span[contains(@class, 't-bold')] | " + 
+                                ".//span[contains(@class, 'entity__primary')] | .//div[contains(@class, 't-bold')]")
                             
-                        # Try various selectors for degree
-                        try:
-                            degree = item.find_element(By.XPATH, ".//p[contains(@class, 'degree-name')] | .//span[contains(@class, 'pv-entity__secondary-title')]").text.strip()
-                        except Exception:
-                            pass
-                            
-                        # Try to extract dates
-                        try:
-                            dates = item.find_element(By.XPATH, ".//p[contains(@class, 'pv-entity__dates')] | .//span[contains(@class, 'date-range')]").text.strip()
-                        except Exception:
-                            pass
+                            if heading_elements and len(heading_elements) > 0:
+                                edu_entry["school"] = heading_elements[0].text.strip()
+                                logger.debug(f"Found school using heading approach: {edu_entry['school']}")
+                        except Exception as e:
+                            logger.debug(f"Error finding school name via headings: {e}")
                         
-                        if school:
-                            edu_entry["school"] = school
-                            edu_entry["degree"] = degree
-                            edu_entry["dates"] = dates
+                        # Approach 2: Look for images with alt text (university logos)
+                        if "school" not in edu_entry or not edu_entry["school"]:
+                            try:
+                                img_elements = item.find_elements(By.XPATH, ".//img")
+                                for img in img_elements:
+                                    alt_text = img.get_attribute("alt")
+                                    if alt_text and len(alt_text) > 3:  # Valid alt text for a school name
+                                        edu_entry["school"] = alt_text
+                                        logger.debug(f"Found school using image alt text: {edu_entry['school']}")
+                                        break
+                            except Exception as e:
+                                logger.debug(f"Error finding school name via images: {e}")
+                        
+                        # Extract degree - look for text that contains common degree terms
+                        if "school" in edu_entry:
+                            try:
+                                # Remove school name from item text to avoid duplication
+                                remaining_text = item_text.replace(edu_entry["school"], "")
+                                
+                                # Look for specific degree elements
+                                degree_elements = item.find_elements(By.XPATH, 
+                                    ".//span[contains(@class, 'secondary-text')] | .//div[contains(@class, 't-normal')] | .//div[contains(@class, 'entity-secondary')]")
+                                
+                                for element in degree_elements:
+                                    text = element.text.strip()
+                                    
+                                    # Common degree patterns
+                                    degree_keywords = ["bachelor", "master", "b.e.", "b. e.", "b.s.", "b.tech", "m.tech", 
+                                                     "computer science", "engineering", "bsc", "msc", "phd", "doctorate"]
+                                    
+                                    if any(keyword in text.lower() for keyword in degree_keywords):
+                                        edu_entry["degree"] = text
+                                        logger.debug(f"Found degree: {text}")
+                                        break
+                                
+                                # If we couldn't find a degree with keywords, use the first non-date secondary text
+                                if "degree" not in edu_entry and degree_elements and len(degree_elements) > 0:
+                                    for element in degree_elements:
+                                        text = element.text.strip()
+                                        # Skip if it looks like a date range
+                                        if not any(year in text for year in ["2019", "2020", "2021", "2022", "2023", "2024"]) and "-" not in text:
+                                            edu_entry["degree"] = text
+                                            logger.debug(f"Found degree as first non-date secondary text: {text}")
+                                            break
+                            except Exception as e:
+                                logger.debug(f"Error extracting degree: {e}")
+                        
+                        # Extract dates - look for text that matches date patterns
+                        try:
+                            date_elements = item.find_elements(By.XPATH, 
+                                ".//span[contains(@class, 'date-range')] | .//span[contains(text(), '-')] | " +
+                                ".//div[contains(text(), '-')] | .//div[contains(@class, 'date-range')]")
+                            
+                            for element in date_elements:
+                                text = element.text.strip()
+                                # Look for text that has year or date patterns
+                                if any(year in text for year in ["2019", "2020", "2021", "2022", "2023", "2024"]) or "-" in text:
+                                    edu_entry["dates"] = text
+                                    
+                                    # Try to extract start and end dates
+                                    if "-" in text:
+                                        date_parts = text.split("-")
+                                        if len(date_parts) >= 2:
+                                            edu_entry["start_date"] = date_parts[0].strip()
+                                            edu_entry["end_date"] = date_parts[1].strip()
+                                    
+                                    logger.debug(f"Found dates: {text}")
+                                    break
+                        except Exception as e:
+                            logger.debug(f"Error extracting dates: {e}")
+                        
+                        # Extract any skills associated with this education
+                        try:
+                            skills_elements = item.find_elements(By.XPATH, ".//*[contains(text(), 'Skills:')]")
+                            if skills_elements:
+                                for skills_element in skills_elements:
+                                    skills_text = skills_element.text.strip()
+                                    if "Skills:" in skills_text:
+                                        skills = skills_text.split("Skills:")[1].strip()
+                                        edu_entry["skills"] = skills
+                                        logger.debug(f"Found skills: {skills}")
+                                        break
+                        except Exception as e:
+                            logger.debug(f"Error extracting skills: {e}")
+                        
+                        # Only add if we have at least a school name
+                        if "school" in edu_entry and edu_entry["school"]:
                             education.append(edu_entry)
-                    except Exception as edu_err:
-                        logger.debug(f"Error processing education item: {edu_err}")
+                            logger.info(f"Added education entry: {edu_entry}")
+                    except Exception as item_err:
+                        logger.debug(f"Error processing education item: {item_err}")
+            else:
+                logger.warning("Could not find education section")
+                
         except Exception as e:
-            logger.debug(f"Error extracting education: {e}")
+            logger.error(f"Error extracting education: {e}")
         
         return education
-    
+
     def extract_skills(self):
         """Extract skills information"""
         skills = []
@@ -658,8 +811,8 @@ class LinkedInSeleniumScraper:
                 try:
                     h1_elements = self.driver.find_elements(By.TAG_NAME, "h1")
                     if h1_elements and len(h1_elements) > 0:
-                        for h1 in h1_elements:
-                            text = h1.text.strip()
+                        for h1_element in h1_elements: # Renamed h1 to h1_element to avoid conflict with selector
+                            text = h1_element.text.strip()
                             if text:
                                 logger.info(f"Found h1 with text: {text}")
                                 profile_data['name'] = text
