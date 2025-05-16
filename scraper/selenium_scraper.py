@@ -23,81 +23,82 @@ class LinkedInSeleniumScraper:
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
     def initialize(self):
-     """Initialize the browser for Render environment"""
-    logger.info("Initializing browser")
-    
-    # Print system information for debugging
-    import platform
-    logger.info(f"OS: {platform.platform()}")
-    logger.info(f"Python: {platform.python_version()}")
-    
-    options = Options()
-    if self.headless:
-        options.add_argument("--headless=new")  # Updated headless argument for newer Chrome
-    
-    # Enhanced anti-detection measures
-    options.add_argument("--window-size=1920,1080")  # Larger window size
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-notifications")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    
-    # Random user agent to avoid detection
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
-    ]
-    options.add_argument(f"--user-agent={random.choice(user_agents)}")
-    
-    # For Selenium 4.5.0 compatibility
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    # Create screenshots directory
-    os.makedirs("screenshots", exist_ok=True)
-    
-    try:
-        # Check for Chrome binary in common locations
-        chrome_binary_locations = [
-            "/usr/bin/google-chrome-stable",  # Standard Linux location
-            "/usr/bin/google-chrome",         # Alternative Linux location
-            "/usr/bin/chromium-browser",      # Chromium location
-            "/usr/bin/chromium"               # Alternative Chromium
+        """Initialize the browser for Render environment"""
+        logger.info("Initializing browser")
+        
+        # Print system information for debugging
+        import platform
+        logger.info(f"OS: {platform.platform()}")
+        logger.info(f"Python: {platform.python_version()}")
+        
+        options = Options()
+        if self.headless:
+            options.add_argument("--headless=new")  # Updated headless argument for newer Chrome
+        
+        # Enhanced anti-detection measures
+        options.add_argument("--window-size=1920,1080")  # Larger window size
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        
+        # Random user agent to avoid detection
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15"
         ]
+        options.add_argument(f"--user-agent={random.choice(user_agents)}")
         
-        # Check which binary locations exist
-        for location in chrome_binary_locations:
-            if os.path.exists(location):
-                logger.info(f"Found Chrome binary at: {location}")
-                options.binary_location = location
-                break
+        # For Selenium 4.5.0 compatibility
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
         
-        # Direct Chrome initialization (avoiding ChromeDriverManager)
-        logger.info("Initializing Chrome directly...")
-        self.driver = webdriver.Chrome(options=options)
+        # Create screenshots directory
+        os.makedirs("screenshots", exist_ok=True)
         
-        logger.info("Chrome initialized successfully")
-        
-        # Set script to disable webdriver detection
-        self.driver.execute_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => false,
-        });
-        """)
-        
-        return True
-    except Exception as e:
-        logger.error(f"Error initializing Chrome: {e}")
-        # If we have detailed error info, add it to logs
-        if hasattr(e, 'msg'):
-            logger.error(f"Error message: {e.msg}")
-        
-        # Raise for proper handling
-        raise e
+        try:
+            # Check for Chrome binary in common locations
+            chrome_binary_locations = [
+                "/usr/bin/google-chrome-stable",  # Standard Linux location
+                "/usr/bin/google-chrome",         # Alternative Linux location
+                "/usr/bin/chromium-browser",      # Chromium location
+                "/usr/bin/chromium"               # Alternative Chromium
+            ]
+            
+            # Check which binary locations exist
+            for location in chrome_binary_locations:
+                if os.path.exists(location):
+                    logger.info(f"Found Chrome binary at: {location}")
+                    options.binary_location = location
+                    break
+            
+            # Direct Chrome initialization (avoiding ChromeDriverManager)
+            logger.info("Initializing Chrome directly...")
+            self.driver = webdriver.Chrome(options=options)
+            
+            logger.info("Chrome initialized successfully")
+            
+            # Set script to disable webdriver detection
+            self.driver.execute_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => false,
+            });
+            """)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error initializing Chrome: {e}")
+            # If we have detailed error info, add it to logs
+            if hasattr(e, 'msg'):
+                logger.error(f"Error message: {e.msg}")
+            
+            # Raise for proper handling
+            raise e
+
     def login(self, email, password):
         """Login to LinkedIn with provided credentials"""
         try:
