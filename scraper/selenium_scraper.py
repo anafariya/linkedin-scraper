@@ -11,7 +11,7 @@ import logging
 import os
 import random
 import json
-from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.chrome import ChromeDriverManager # Not strictly used but present in original
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,90 +22,50 @@ class LinkedInSeleniumScraper:
         self.driver = None
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
-def initialize(self):
-    """Initialize the browser using webdriver_manager with specific cache"""
-    logger.info("Initializing browser with improved ChromeDriverManager setup")
-    
-    import platform
-    logger.info(f"OS: {platform.platform()}")
-    logger.info(f"Python: {platform.python_version()}")
-    
-    # Configure logging for webdriver-manager
-    import logging
-    logging.getLogger('WDM').setLevel(logging.INFO)
-    
-    options = Options()
-    if self.headless:
-        options.add_argument("--headless=new")
-    
-    # Enhanced options for Render environment
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    
-    # For Selenium 4.5.0 compatibility
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    # Create screenshots directory
-    os.makedirs("screenshots", exist_ok=True)
-    
-    try:
-        # Configure webdriver-manager with exact version and cache path
-        from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.utils import get_browser_version_from_os
-        from webdriver_manager.core.driver_cache import DriverCacheManager
+    def initialize(self):
+        """Initialize the browser for Docker environment"""
+        logger.info("Initializing browser for Docker environment")
         
-        # Create a cache in the current directory which is writable
-        os.makedirs(".wdm", exist_ok=True)
-        cache_manager = DriverCacheManager(".wdm")
+        options = Options()
+        if self.headless:
+            options.add_argument("--headless=new")
         
-        # Set environment variables for webdriver-manager
-        os.environ['WDM_LOCAL'] = '1'
-        os.environ['WDM_SSL_VERIFY'] = '0'
+        # Docker-specific options
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         
-        # Get specific chrome version info if available
-        browser_version = None
+        # Anti-detection options
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        
+        # For Selenium 4.5.0 compatibility
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        # Create screenshots directory
+        os.makedirs("screenshots", exist_ok=True)
+        
         try:
-            browser_version = get_browser_version_from_os()
-            logger.info(f"Detected browser version: {browser_version}")
-        except:
-            logger.info("Could not detect browser version, using default")
-        
-        # Install driver with specific configuration
-        driver_path = ChromeDriverManager(
-            cache_manager=cache_manager,
-            version="latest",  # Use latest driver
-            cache_valid_range=1  # Force download if older than 1 day
-        ).install()
-        
-        logger.info(f"ChromeDriver installed at: {driver_path}")
-        
-        # Create service with explicit path
-        service = Service(executable_path=driver_path)
-        
-        # Initialize driver
-        self.driver = webdriver.Chrome(service=service, options=options)
-        logger.info("Chrome initialized successfully with configured webdriver-manager")
-        
-        # Set script to disable webdriver detection
-        self.driver.execute_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => false,
-        });
-        """)
-        
-        return True
-    except Exception as e:
-        logger.error(f"Error initializing Chrome: {e}")
-        # If we have detailed error info, log it
-        if hasattr(e, 'msg'):
-            logger.error(f"Error message: {e.msg}")
-        
-        raise e
+            # In Docker, Chrome is installed system-wide
+            # If using webdriver_manager, it would be:
+            # self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+            self.driver = webdriver.Chrome(options=options)
+            logger.info("Chrome initialized successfully in Docker environment")
+            
+            # Set script to disable webdriver detection
+            self.driver.execute_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => false,
+            });
+            """)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error initializing Chrome: {e}")
+            raise e
+
     def login(self, email, password):
         """Login to LinkedIn with provided credentials"""
         try:
@@ -147,7 +107,7 @@ def initialize(self):
                         return True
                     else:
                         return False
-                return False
+                return False # If headless or manual interaction failed
                 
             # If we got redirected anywhere else, consider it success
             logger.info(f"Login successful, current URL: {self.driver.current_url}")
@@ -173,8 +133,8 @@ def initialize(self):
         """Scroll down the page to load more content"""
         logger.info("Scrolling page to load dynamic content")
         
-        # Initial scroll height
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        # Initial scroll height (variable last_height is not used later)
+        # last_height = self.driver.execute_script("return document.body.scrollHeight")
         
         # Scroll down incrementally with random pauses
         for i in range(5):  # Scroll in stages
@@ -205,15 +165,15 @@ def initialize(self):
                     for button in buttons:
                         try:
                             # Scroll to button
-                            self.driver.execute_script("arguments[0].scrollIntoView();", button)
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", button)
                             time.sleep(0.5)
                             # Click button
                             button.click()
-                            time.sleep(1)
+                            time.sleep(1) # Wait for content to expand
                         except Exception as click_err:
-                            logger.debug(f"Error clicking button: {click_err}")
+                            logger.debug(f"Error clicking button ({button_xpath}): {click_err}")
                 except Exception as find_err:
-                    logger.debug(f"Error finding buttons: {find_err}")
+                    logger.debug(f"Error finding buttons ({button_xpath}): {find_err}")
         except Exception as e:
             logger.debug(f"Error expanding sections: {e}")
             
@@ -221,7 +181,6 @@ def initialize(self):
         """Extract full name using multiple robust methods"""
         logger.info("Extracting name from profile")
         
-        # Try multiple different selectors that could contain the name
         name_selectors = [
             'h1.text-heading-xlarge',                 # Current LinkedIn format
             'h1.inline.t-24.t-black.t-normal',        # Older LinkedIn format
@@ -235,117 +194,71 @@ def initialize(self):
             '//div[contains(@class, "pv-text-details__left-panel")]//h1' # Left panel h1
         ]
         
-        # First try CSS selectors
         for selector in name_selectors:
-            if selector.startswith('//'):
-                # This is an XPath selector
-                try:
+            try:
+                if selector.startswith('//'):
                     elements = self.driver.find_elements(By.XPATH, selector)
-                    if elements and len(elements) > 0:
-                        full_name = elements[0].text.strip()
-                        logger.info(f"Found name with XPath selector {selector}: {full_name}")
-                        
-                        # Log details about the element for debugging
-                        element_html = self.driver.execute_script(
-                            "return arguments[0].outerHTML;", 
-                            elements[0]
-                        )
-                        logger.debug(f"Name element HTML: {element_html}")
-                        
-                        # Split name into first and last
-                        name_parts = full_name.split()
-                        if len(name_parts) >= 2:
-                            first_name = name_parts[0]
-                            last_name = ' '.join(name_parts[1:])
-                        else:
-                            first_name = full_name
-                            last_name = ""
-                        
-                        return {
-                            "name": full_name,
-                            "first_name": first_name,
-                            "last_name": last_name
-                        }
-                except Exception as e:
-                    logger.debug(f"Error finding name with XPath {selector}: {e}")
-            else:
-                # This is a CSS selector
-                try:
+                else:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements and len(elements) > 0:
-                        full_name = elements[0].text.strip()
-                        logger.info(f"Found name with CSS selector {selector}: {full_name}")
+
+                if elements and len(elements) > 0:
+                    full_name = elements[0].text.strip()
+                    if full_name: # Ensure name is not empty
+                        logger.info(f"Found name with selector {selector}: {full_name}")
                         
                         # Log details about the element for debugging
-                        element_html = self.driver.execute_script(
-                            "return arguments[0].outerHTML;", 
-                            elements[0]
-                        )
-                        logger.debug(f"Name element HTML: {element_html}")
+                        # element_html = self.driver.execute_script(
+                        #     "return arguments[0].outerHTML;", 
+                        #     elements[0]
+                        # )
+                        # logger.debug(f"Name element HTML: {element_html[:200]}") # Log first 200 chars
                         
-                        # Split name into first and last
                         name_parts = full_name.split()
-                        if len(name_parts) >= 2:
-                            first_name = name_parts[0]
-                            last_name = ' '.join(name_parts[1:])
-                        else:
-                            first_name = full_name
-                            last_name = ""
+                        first_name = name_parts[0] if len(name_parts) > 0 else full_name
+                        last_name = ' '.join(name_parts[1:]) if len(name_parts) >= 2 else ""
                         
                         return {
                             "name": full_name,
                             "first_name": first_name,
                             "last_name": last_name
                         }
-                except Exception as e:
-                    logger.debug(f"Error finding name with CSS selector {selector}: {e}")
+            except Exception as e:
+                logger.debug(f"Error finding name with selector {selector}: {e}")
         
-        # If we got here, we couldn't find the name with any selector
-        logger.warning("Failed to extract name with any selector")
+        logger.warning("Failed to extract name with primary selectors")
         
-        # As a last resort, try to find any heading text at the top of the page
+        # Fallback: find any h1 at the top of the page
         try:
-            # Scroll to top
             self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(1)
+            self.driver.save_screenshot("screenshots/name_extraction_fallback.png")
             
-            # Take a screenshot for debugging
-            self.driver.save_screenshot("screenshots/name_extraction_top.png")
-            
-            # Try to find any text that might be a name at the top
             main_content = self.driver.find_element(By.TAG_NAME, "main")
             headings = main_content.find_elements(By.TAG_NAME, "h1")
             
             if headings and len(headings) > 0:
                 full_name = headings[0].text.strip()
-                logger.info(f"Found heading that might be name: {full_name}")
-                
-                # Split name into first and last
-                name_parts = full_name.split()
-                if len(name_parts) >= 2:
-                    first_name = name_parts[0]
-                    last_name = ' '.join(name_parts[1:])
-                else:
-                    first_name = full_name
-                    last_name = ""
-                
-                return {
-                    "name": full_name,
-                    "first_name": first_name,
-                    "last_name": last_name
-                }
+                if full_name:
+                    logger.info(f"Found heading (fallback) that might be name: {full_name}")
+                    name_parts = full_name.split()
+                    first_name = name_parts[0] if len(name_parts) > 0 else full_name
+                    last_name = ' '.join(name_parts[1:]) if len(name_parts) >= 2 else ""
+                    return {
+                        "name": full_name,
+                        "first_name": first_name,
+                        "last_name": last_name
+                    }
         except Exception as e:
             logger.error(f"Error in fallback name extraction: {e}")
         
-        # If all attempts failed, return empty data
         return {"name": "", "first_name": "", "last_name": ""}
     
     def extract_headline(self):
         """Extract the professional headline/title"""
         headline_selectors = [
-            'div.text-body-medium',
+            'div.text-body-medium.break-words', # More specific modern selector
             '.pv-text-details__left-panel .text-body-medium',
-            '.ph5 .mt2',
+            '.ph5 .mt2 .text-body-medium', # Often title is here
             '.pv-top-card-section__headline',
             '.pv-text-details__left-panel h2'
         ]
@@ -353,15 +266,17 @@ def initialize(self):
         for selector in headline_selectors:
             headline = self.get_text_safely(selector)
             if headline:
+                logger.info(f"Found headline with selector {selector}: {headline}")
                 return headline
         
+        logger.warning("Headline not found with any selector.")
         return ""
     
     def extract_location(self):
         """Extract location information"""
         location_selectors = [
+            'span.text-body-small.inline.t-black--light.break-words', # Modern selector
             '.pv-text-details__left-panel .text-body-small:not(.hoverable-link-text)',
-            'span.text-body-small.inline.t-black--light.break-words',
             '.pv-top-card-section__location',
             '.pv-text-details__left-panel span.text-body-small'
         ]
@@ -369,27 +284,35 @@ def initialize(self):
         for selector in location_selectors:
             location = self.get_text_safely(selector)
             if location:
+                logger.info(f"Found location with selector {selector}: {location}")
                 return location
         
+        logger.warning("Location not found with any selector.")
         return ""
     
     def extract_about(self):
         """Extract the about/summary section"""
-        # Try multiple approaches to find the about section
         try:
-            # Try section with "About" header
-            about_section = self.driver.find_element(By.XPATH, "//section[.//div[contains(text(), 'About')]]")
-            about_text = about_section.find_element(By.XPATH, ".//div[contains(@class, 'inline-show-more-text')]").text.strip()
-            return about_text
-        except Exception:
-            pass
-        
-        # Try other selectors
+            # Try section with "About" header, then get its content
+            # Modern LinkedIn uses aria-label for sections
+            about_section = self.driver.find_element(By.XPATH, "//section[.//h2[contains(text(), 'About')]] | //div[@aria-label='About' or @aria-labelledby='about-section']")
+            # Content is often in a div with 'display-flex' and 'inline-show-more-text'
+            about_text_element = about_section.find_element(By.XPATH, ".//div[contains(@class, 'inline-show-more-text')]//span[@aria-hidden='true'] | .//div[contains(@class, 'pv-shared-text-with-see-more')]//p")
+            about_text = about_text_element.text.strip()
+            if about_text:
+                logger.info("Found about section using header approach.")
+                return about_text
+        except NoSuchElementException:
+            logger.debug("About section not found with primary header approach.")
+        except Exception as e:
+            logger.debug(f"Error in primary about extraction: {e}")
+
+        # Fallback selectors
         about_selectors = [
-            ".pv-about__summary-text",
-            ".pv-about-section div.pv-shared-text-with-see-more",
-            ".display-flex.ph5.pv3",
-            "//div[contains(@class,'display-flex')]/span[contains(@class,'text-body-medium')]"
+            ".pv-about__summary-text", # Older
+            ".display-flex.ph5.pv3 .inline-show-more-text", # Structure
+            "//section[contains(@class, 'artdeco-card') and .//span[text()='About']]//div[contains(@class,'inline-show-more-text')]", # Generic card approach
+            "//div[contains(@class,'display-flex')]/span[contains(@class,'text-body-medium') and not(ancestor::*[@aria-label='Name' or @aria-label='Headline' or @aria-label='Location'])]" # Very generic, avoid name/headline
         ]
         
         for selector in about_selectors:
@@ -400,495 +323,363 @@ def initialize(self):
                     about = self.get_text_safely(selector)
                 
                 if about:
+                    logger.info(f"Found about with fallback selector {selector}.")
                     return about
             except Exception:
                 pass
         
+        logger.warning("About section not found with any selector.")
         return ""
     
     def extract_experience(self):
         """Extract work experience information"""
         experiences = []
-        
         try:
-            # Find experience section
+            # Find experience section (modern LinkedIn often uses aria-label)
             exp_section_xpaths = [
-                "//section[.//div[contains(text(), 'Experience')]]",
-                "//section[contains(@class, 'experience-section')]",
-                "//section[contains(@id, 'experience-section')]"
+                "//section[.//h2[contains(text(), 'Experience')]]",
+                "//div[@aria-label='Experience' or @aria-labelledby='experience-section']",
+                "//section[contains(@id, 'experience-section') or contains(@class, 'experience-section')]"
             ]
             
             exp_section = None
             for xpath in exp_section_xpaths:
                 try:
                     exp_section = self.driver.find_element(By.XPATH, xpath)
+                    logger.info(f"Found experience section with XPath: {xpath}")
                     break
                 except NoSuchElementException:
                     continue
             
             if exp_section:
-                # Try to find experience list items
-                exp_items = exp_section.find_elements(By.XPATH, ".//li")
+                # Experience items are often <li> elements or divs with specific classes
+                exp_item_xpaths = [
+                    ".//li[contains(@class, 'artdeco-list__item')]", # Common list item class
+                    ".//div[contains(@class, 'pvs-entity') and .//img]", # Items often have an image (logo)
+                    ".//li" # Generic list items if others fail
+                ]
+
+                exp_items = []
+                for item_xpath in exp_item_xpaths:
+                    try:
+                        items = exp_section.find_elements(By.XPATH, item_xpath)
+                        if items:
+                            exp_items = items
+                            logger.info(f"Found {len(exp_items)} experience items using: {item_xpath}")
+                            break
+                    except Exception:
+                        continue
                 
-                # Process each item
                 for i, item in enumerate(exp_items):
                     if i >= 5:  # Limit to 5 most recent experiences
                         break
                     
+                    job = {}
                     try:
-                        job = {}
-                        
-                        # Try to extract title, company, dates
-                        title = ""
-                        company = ""
-                        dates = ""
-                        
-                        # Try various selectors for title
-                        try:
-                            title = item.find_element(By.XPATH, ".//h3 | .//span[contains(@class, 'mr1 t-bold')]").text.strip()
-                        except Exception:
-                            pass
-                            
-                        # Try various selectors for company
-                        try:
-                            company = item.find_element(By.XPATH, ".//p[contains(@class, 'hoverable-link-text')] | .//h4").text.strip()
-                        except Exception:
-                            pass
-                            
-                        # Try to extract dates
-                        try:
-                            dates = item.find_element(By.XPATH, ".//span[contains(@class, 'date-range')] | .//div[contains(@class, 'date-range')]").text.strip()
-                        except Exception:
-                            pass
-                        
-                        if title or company:
-                            job["title"] = title
-                            job["company"] = company
-                            job["dates"] = dates
-                            experiences.append(job)
-                    except Exception as exp_err:
-                        logger.debug(f"Error processing experience item: {exp_err}")
+                        # Title: Often a span with 't-bold' or a specific heading
+                        title = item.find_element(By.XPATH, ".//span[contains(@class, 't-bold')]/span[@aria-hidden='true'] | .//h3//span[@aria-hidden='true'] | .//div[contains(@class,'display-flex')]/div/div/div/div/span[@aria-hidden='true']").text.strip()
+                        job["title"] = title
+                    except NoSuchElementException:
+                        job["title"] = ""
+                        logger.debug(f"Title not found for experience item {i+1}")
+
+                    try:
+                        # Company: Often a span near the title, or with 'pv-entity__secondary-title'
+                        company = item.find_element(By.XPATH, ".//span[contains(@class, 'job-card-container__company-name')] | .//span[contains(@class, 't-normal')]/span[@aria-hidden='true'] | .//p[contains(@class,'pv-entity__secondary-title')] | .//div[contains(@class,'display-flex')]/div/div/div/span[@aria-hidden='true']").text.strip()
+                        # Filter out date range if it gets picked up as company
+                        if job["title"] and company.startswith(job["title"]): # sometimes title is part of company string
+                             company = company.replace(job["title"], "").strip()
+                        job["company"] = company.split('·')[0].strip() # Handle "Company · Full-time"
+                    except NoSuchElementException:
+                        job["company"] = ""
+                        logger.debug(f"Company not found for experience item {i+1}")
+
+                    try:
+                        # Dates: Look for 'date-range' or a span with year patterns
+                        dates = item.find_element(By.XPATH, ".//span[contains(@class, 'date-range')]/span[@aria-hidden='true'] | .//span[contains(@class, 't-normal t-black--light')]/span[@aria-hidden='true']").text.strip()
+                        job["dates"] = dates.split('·')[0].strip() # Handle "Dates · Duration"
+                    except NoSuchElementException:
+                        job["dates"] = ""
+                        logger.debug(f"Dates not found for experience item {i+1}")
+                    
+                    if job.get("title") or job.get("company"):
+                        experiences.append(job)
+                        logger.info(f"Extracted experience: {job}")
+                    else:
+                        logger.debug(f"Skipping empty experience item {i+1}: {item.text[:100]}")
+
+            else:
+                logger.warning("Experience section not found.")
         except Exception as e:
-            logger.debug(f"Error extracting experiences: {e}")
+            logger.error(f"Error extracting experiences: {e}")
         
         return experiences
     
     def extract_education(self):
-        """Extract education information for LinkedIn's modern layout without any hardcoding"""
-        education = []
-        
+        """Extract education information"""
+        education_entries = []
         try:
-            # Find the Education section by heading
-            education_section_xpath = "//section[.//div[text()='Education']] | //div[h2[text()='Education']] | //div[preceding-sibling::h2[text()='Education']]"
+            # Find education section
+            edu_section_xpaths = [
+                "//section[.//h2[contains(text(), 'Education')]]",
+                "//div[@aria-label='Education' or @aria-labelledby='education-section']",
+                "//section[contains(@id, 'education-section') or contains(@class, 'education-section')]"
+            ]
             
-            # Try to find education section
-            try:
-                education_section = self.driver.find_element(By.XPATH, education_section_xpath)
-                logger.info("Found education section")
-            except NoSuchElementException:
-                # Try a more generic approach - find any section that contains "Education" text
-                sections = self.driver.find_elements(By.XPATH, "//section | //div[contains(@class, 'pvs-list')]")
-                education_section = None
-                for section in sections:
-                    if "Education" in section.text:
-                        education_section = section
-                        logger.info("Found education section by text content")
-                        break
-            
-            if education_section:
-                # Take a screenshot for debugging
-                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", education_section)
-                time.sleep(1)
-                self.driver.save_screenshot("screenshots/education_section.png")
-                
-                # Try multiple approaches to find education items
-                education_items = []
-                
-                # Approach 1: Look for list items in the education section
+            edu_section = None
+            for xpath in edu_section_xpaths:
                 try:
-                    items = education_section.find_elements(By.XPATH, ".//li")
-                    if items and len(items) > 0:
-                        education_items = items
-                        logger.info(f"Found {len(items)} education items using list items approach")
-                except Exception as e:
-                    logger.debug(f"Error finding education list items: {e}")
+                    edu_section = self.driver.find_element(By.XPATH, xpath)
+                    logger.info(f"Found education section with XPath: {xpath}")
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", edu_section)
+                    time.sleep(0.5)
+                    self.driver.save_screenshot("screenshots/education_section_found.png")
+                    break
+                except NoSuchElementException:
+                    continue
+
+            if edu_section:
+                edu_item_xpaths = [
+                    ".//li[contains(@class, 'artdeco-list__item') and .//img]", # Common list item with logo
+                    ".//div[contains(@class, 'pvs-entity') and .//img]", # Generic entity with logo
+                    ".//li" # Fallback to any list item
+                ]
                 
-                # Approach 2: Look for div elements that contain images (school logos)
-                if not education_items:
+                edu_items = []
+                for item_xpath in edu_item_xpaths:
                     try:
-                        items = education_section.find_elements(By.XPATH, ".//div[.//img]")
-                        if items and len(items) > 0:
-                            education_items = items
-                            logger.info(f"Found {len(items)} education items using image approach")
-                    except Exception as e:
-                        logger.debug(f"Error finding education items with images: {e}")
-                
-                # Approach 3: Look for display-flex divs that could be education entries
-                if not education_items:
+                        items = edu_section.find_elements(By.XPATH, item_xpath)
+                        if items:
+                            edu_items = items
+                            logger.info(f"Found {len(edu_items)} education items using: {item_xpath}")
+                            break
+                    except Exception:
+                        continue
+
+                for i, item in enumerate(edu_items):
+                    entry = {}
                     try:
-                        items = education_section.find_elements(By.XPATH, ".//div[contains(@class, 'display-flex')]")
-                        if items and len(items) > 0:
-                            # Filter items that are too small to be education entries
-                            education_items = [item for item in items if len(item.text.strip()) > 20]
-                            logger.info(f"Found {len(education_items)} education items using display-flex approach")
-                    except Exception as e:
-                        logger.debug(f"Error finding display-flex education items: {e}")
-                
-                # Process each education item
-                for item in education_items:
+                        # School Name: Often a bold span or primary text
+                        school = item.find_element(By.XPATH, ".//span[contains(@class, 't-bold')]/span[@aria-hidden='true'] | .//div[contains(@class,'display-flex')]/div/div/div/div/span[@aria-hidden='true'] | .//a//div[contains(@class,'align-items-center')]//span[@aria-hidden='true']").text.strip()
+                        entry["school"] = school
+                    except NoSuchElementException:
+                        entry["school"] = ""
+                        logger.debug(f"School name not found for education item {i+1}")
+
                     try:
-                        # Skip items with minimal text (likely not education entries)
-                        if len(item.text.strip()) < 15:  # A real education entry would have more text
-                            continue
-                        
-                        edu_entry = {}
-                        item_text = item.text.strip()
-                        logger.debug(f"Processing education item: {item_text[:100]}...")
-                        
-                        # Extract school name - multiple approaches
-                        
-                        # Approach 1: Look for the main heading or title
-                        try:
-                            heading_elements = item.find_elements(By.XPATH, 
-                                ".//span[contains(@class, 'primary-text')] | .//span[contains(@class, 't-bold')] | " + 
-                                ".//span[contains(@class, 'entity__primary')] | .//div[contains(@class, 't-bold')]")
-                            
-                            if heading_elements and len(heading_elements) > 0:
-                                edu_entry["school"] = heading_elements[0].text.strip()
-                                logger.debug(f"Found school using heading approach: {edu_entry['school']}")
-                        except Exception as e:
-                            logger.debug(f"Error finding school name via headings: {e}")
-                        
-                        # Approach 2: Look for images with alt text (university logos)
-                        if "school" not in edu_entry or not edu_entry["school"]:
-                            try:
-                                img_elements = item.find_elements(By.XPATH, ".//img")
-                                for img in img_elements:
-                                    alt_text = img.get_attribute("alt")
-                                    if alt_text and len(alt_text) > 3:  # Valid alt text for a school name
-                                        edu_entry["school"] = alt_text
-                                        logger.debug(f"Found school using image alt text: {edu_entry['school']}")
-                                        break
-                            except Exception as e:
-                                logger.debug(f"Error finding school name via images: {e}")
-                        
-                        # Extract degree - look for text that contains common degree terms
-                        if "school" in edu_entry:
-                            try:
-                                # Remove school name from item text to avoid duplication
-                                remaining_text = item_text.replace(edu_entry["school"], "")
-                                
-                                # Look for specific degree elements
-                                degree_elements = item.find_elements(By.XPATH, 
-                                    ".//span[contains(@class, 'secondary-text')] | .//div[contains(@class, 't-normal')] | .//div[contains(@class, 'entity-secondary')]")
-                                
-                                for element in degree_elements:
-                                    text = element.text.strip()
-                                    
-                                    # Common degree patterns
-                                    degree_keywords = ["bachelor", "master", "b.e.", "b. e.", "b.s.", "b.tech", "m.tech", 
-                                                     "computer science", "engineering", "bsc", "msc", "phd", "doctorate"]
-                                    
-                                    if any(keyword in text.lower() for keyword in degree_keywords):
-                                        edu_entry["degree"] = text
-                                        logger.debug(f"Found degree: {text}")
-                                        break
-                                
-                                # If we couldn't find a degree with keywords, use the first non-date secondary text
-                                if "degree" not in edu_entry and degree_elements and len(degree_elements) > 0:
-                                    for element in degree_elements:
-                                        text = element.text.strip()
-                                        # Skip if it looks like a date range
-                                        if not any(year in text for year in ["2019", "2020", "2021", "2022", "2023", "2024"]) and "-" not in text:
-                                            edu_entry["degree"] = text
-                                            logger.debug(f"Found degree as first non-date secondary text: {text}")
-                                            break
-                            except Exception as e:
-                                logger.debug(f"Error extracting degree: {e}")
-                        
-                        # Extract dates - look for text that matches date patterns
-                        try:
-                            date_elements = item.find_elements(By.XPATH, 
-                                ".//span[contains(@class, 'date-range')] | .//span[contains(text(), '-')] | " +
-                                ".//div[contains(text(), '-')] | .//div[contains(@class, 'date-range')]")
-                            
-                            for element in date_elements:
-                                text = element.text.strip()
-                                # Look for text that has year or date patterns
-                                if any(year in text for year in ["2019", "2020", "2021", "2022", "2023", "2024"]) or "-" in text:
-                                    edu_entry["dates"] = text
-                                    
-                                    # Try to extract start and end dates
-                                    if "-" in text:
-                                        date_parts = text.split("-")
-                                        if len(date_parts) >= 2:
-                                            edu_entry["start_date"] = date_parts[0].strip()
-                                            edu_entry["end_date"] = date_parts[1].strip()
-                                    
-                                    logger.debug(f"Found dates: {text}")
-                                    break
-                        except Exception as e:
-                            logger.debug(f"Error extracting dates: {e}")
-                        
-                        # Extract any skills associated with this education
-                        try:
-                            skills_elements = item.find_elements(By.XPATH, ".//*[contains(text(), 'Skills:')]")
-                            if skills_elements:
-                                for skills_element in skills_elements:
-                                    skills_text = skills_element.text.strip()
-                                    if "Skills:" in skills_text:
-                                        skills = skills_text.split("Skills:")[1].strip()
-                                        edu_entry["skills"] = skills
-                                        logger.debug(f"Found skills: {skills}")
-                                        break
-                        except Exception as e:
-                            logger.debug(f"Error extracting skills: {e}")
-                        
-                        # Only add if we have at least a school name
-                        if "school" in edu_entry and edu_entry["school"]:
-                            education.append(edu_entry)
-                            logger.info(f"Added education entry: {edu_entry}")
-                    except Exception as item_err:
-                        logger.debug(f"Error processing education item: {item_err}")
+                        # Degree: Often a span with 't-normal' or secondary text
+                        degree_text = item.find_element(By.XPATH, ".//span[contains(@class, 't-normal') and not(contains(@class,'t-black--light'))]/span[@aria-hidden='true'] | .//div[contains(@class,'display-flex')]/div/div/div/span[@aria-hidden='true'][2]").text.strip()
+                        if entry.get("school") and degree_text.startswith(entry["school"]):
+                            degree_text = degree_text.replace(entry["school"], "").strip()
+                        entry["degree"] = degree_text
+                    except NoSuchElementException:
+                        entry["degree"] = ""
+                        logger.debug(f"Degree not found for education item {i+1}")
+                    
+                    try:
+                        # Dates: Look for spans with year patterns or 'date-range'
+                        dates = item.find_element(By.XPATH, ".//span[contains(@class, 't-normal t-black--light')]/span[@aria-hidden='true'] | .//span[contains(@class, 'date-range')]/span[@aria-hidden='true']").text.strip()
+                        entry["dates"] = dates
+                    except NoSuchElementException:
+                        entry["dates"] = ""
+                        logger.debug(f"Dates not found for education item {i+1}")
+
+                    if entry.get("school"):
+                        education_entries.append(entry)
+                        logger.info(f"Extracted education: {entry}")
+                    else:
+                        logger.debug(f"Skipping empty education item {i+1}: {item.text[:100]}")
             else:
-                logger.warning("Could not find education section")
-                
+                logger.warning("Education section not found.")
         except Exception as e:
             logger.error(f"Error extracting education: {e}")
         
-        return education
+        return education_entries
 
     def extract_skills(self):
         """Extract skills information"""
         skills = []
-        
         try:
-            # Try to expand skills section first
+            # Expand skills section (if a "Show all X skills" button exists)
             try:
-                show_skills_button = self.driver.find_element(By.XPATH, "//button[contains(text(), 'Show all skills')]")
-                self.driver.execute_script("arguments[0].scrollIntoView();", show_skills_button)
-                show_skills_button.click()
-                time.sleep(2)
-            except Exception:
-                pass
-            
-            # Find and extract skills
-            skill_section_xpaths = [
-                "//section[.//div[contains(text(), 'Skills')]]",
-                "//section[contains(@class, 'skills-section')]",
-                "//section[contains(@id, 'skills-section')]",
-                "//div[contains(@class, 'pv-skill-categories-section')]"
+                show_all_skills_button = self.driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Show all skills')] | //a[contains(@href, 'skills') and .//span[contains(text(),'Show all')]]")
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", show_all_skills_button)
+                time.sleep(0.5)
+                show_all_skills_button.click()
+                time.sleep(2) # Wait for modal or section to expand
+                logger.info("Clicked 'Show all skills' button.")
+                self.driver.save_screenshot("screenshots/skills_expanded.png")
+            except NoSuchElementException:
+                logger.info("'Show all skills' button not found or not clickable, proceeding with visible skills.")
+            except Exception as e:
+                logger.debug(f"Error clicking 'Show all skills': {e}")
+
+            # Skills can be in a modal or directly on the page
+            skill_container_xpaths = [
+                "//div[contains(@class, 'artdeco-modal__content')]//ul", # Skills in a modal
+                "//section[.//h2[contains(text(), 'Skills')]]//ul", # Skills in a section list
+                "//div[@aria-label='Skills' or @aria-labelledby='skills-section']//ul",
+                "//div[contains(@class, 'pv-skill-categories-section')]", # Older structure
+                "//div[contains(@class, 'pvs-list')]" # More generic list container if skills are loose
             ]
             
-            for xpath in skill_section_xpaths:
+            skill_elements = []
+            for xpath in skill_container_xpaths:
                 try:
-                    # Find the skills section
-                    skills_section = self.driver.find_element(By.XPATH, xpath)
-                    
-                    # Try different selectors for skill items
-                    skill_selectors = [
-                        ".//span[contains(@class, 'pv-skill-category-entity__name-text')]",
-                        ".//span[contains(@class, 'pvs-entity__primary-text')]",
-                        ".//li//span[contains(@class, 'text-body-small')]"
-                    ]
-                    
-                    for selector in skill_selectors:
-                        try:
-                            skill_elements = skills_section.find_elements(By.XPATH, selector)
-                            for element in skill_elements:
-                                skill_text = element.text.strip()
-                                if skill_text and skill_text not in skills:
-                                    skills.append(skill_text)
-                            
-                            # If we found skills, break
-                            if skills:
-                                break
-                        except Exception:
-                            continue
-                    
-                    # If we found skills, break out of section loop
-                    if skills:
-                        break
+                    # Look for skill text elements within these containers
+                    elements = self.driver.find_elements(By.XPATH, f"{xpath}//span[contains(@class, 't-bold')]/span[@aria-hidden='true'] | {xpath}//div[contains(@class,'pv-skill-category-entity__name-text')] | {xpath}//span[contains(@class, 'pvs-entity__primary-text')]")
+                    if elements:
+                        skill_elements.extend(elements)
+                        logger.info(f"Found {len(elements)} skill elements with XPath segment: {xpath}")
                 except NoSuchElementException:
                     continue
             
-            # If we couldn't find skills via the UI, try to extract from page source
-            if not skills:
-                # Look for specific skill-related content in page source
-                page_source = self.driver.page_source.lower()
-                common_skills = [
-                    "javascript", "python", "java", "c++", "react", "angular", "node.js", 
-                    "aws", "azure", "cloud", "docker", "kubernetes", "devops", "agile", 
-                    "product management", "leadership", "project management", "sql", 
-                    "mongodb", "database", "machine learning", "data science"
-                ]
-                
-                for skill in common_skills:
-                    # Check if the skill is mentioned with skill-related context
-                    if f"skill\">{skill}" in page_source or f">{skill}</span" in page_source:
-                        if skill not in skills:
-                            skills.append(skill)
+            if not skill_elements: # Fallback if above specific selectors fail
+                 skill_elements = self.driver.find_elements(By.XPATH, "//span[contains(@class, 'pv-skill-category-entity__name-text')] | //span[contains(@class, 'pvs-entity__primary-text')]")
+
+
+            for element in skill_elements:
+                try:
+                    skill_text = element.text.strip()
+                    if skill_text and skill_text not in skills:
+                        skills.append(skill_text)
+                except Exception as e:
+                    logger.debug(f"Error extracting single skill text: {e}")
+            
+            logger.info(f"Extracted skills: {skills}")
         except Exception as e:
-            logger.debug(f"Error extracting skills: {e}")
+            logger.error(f"Error extracting skills: {e}")
         
-        return skills
+        return list(set(skills)) # Return unique skills
     
     def extract_current_company(self, experiences=None):
         """Extract current company information from experiences or directly"""
-        # If experiences were already extracted, use the first one as current
         if experiences and len(experiences) > 0:
             first_exp = experiences[0]
-            if 'company' in first_exp and 'title' in first_exp:
-                return {
-                    'name': first_exp['company'],
-                    'title': first_exp['title']
-                }
+            # Check if the first experience is current (e.g., "Present" in dates)
+            if 'dates' in first_exp and ('present' in first_exp['dates'].lower() or not '-' in first_exp['dates']): # Heuristic for current
+                if 'company' in first_exp and 'title' in first_exp:
+                    logger.info(f"Current company from experiences: {first_exp['company']}")
+                    return {
+                        'name': first_exp['company'],
+                        'title': first_exp['title']
+                    }
         
-        # Otherwise try direct extraction
+        # Fallback to direct extraction if not found or experiences are not reliable
         try:
-            company_elements = self.driver.find_elements(By.XPATH, 
-                "//section[.//span[contains(text(), 'Experience')]]//li[1]//span[contains(@class, 'hoverable-link-text')]")
-            if company_elements and len(company_elements) > 0:
-                current_company = company_elements[0].text.strip()
-                
-                # Try to get title directly
-                title = self.get_text_safely('div.text-body-medium')
-                
-                return {
-                    'name': current_company,
-                    'title': title
-                }
+            # This is highly dependent on current LinkedIn layout
+            # Attempt to find the element usually displaying current role at top
+            current_role_element = self.driver.find_element(By.XPATH, "//div[contains(@class, 'pv-text-details__left-panel')]//h2 | //div[@class='text-body-medium break-words']")
+            # The headline often contains the current role
+            headline = self.extract_headline() # Re-use headline extraction
+            if headline:
+                # This is a heuristic, might need refinement. Assumes "Title at Company" format
+                parts = headline.split(' at ')
+                if len(parts) == 2:
+                    logger.info(f"Current company from headline: Title: {parts[0]}, Company: {parts[1]}")
+                    return {'title': parts[0].strip(), 'name': parts[1].strip()}
+                elif experiences and experiences[0].get('company'): # Fallback to most recent company if headline parse fails
+                     logger.info(f"Current company from most recent experience as fallback: {experiences[0]['company']}")
+                     return {'title': experiences[0].get('title', headline), 'name': experiences[0]['company']}
+
+
+        except NoSuchElementException:
+            logger.debug("Current company direct extraction element not found.")
         except Exception as e:
             logger.debug(f"Error extracting current company directly: {e}")
         
+        logger.warning("Current company not definitively found.")
         return None
     
     def scrape_profile(self, profile_url):
-        """Scrape LinkedIn profile data with improved name extraction"""
+        """Scrape LinkedIn profile data"""
         try:
             logger.info(f"Scraping profile: {profile_url}")
             
-            # Navigate to profile
             self.driver.get(profile_url)
             logger.info("Waiting for page to load completely...")
-            time.sleep(5)  # Initial wait for page load
+            WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "main")) # Wait for main content area
+            )
+            time.sleep(random.uniform(3, 5)) # Additional dynamic wait
             
-            # Save screenshot of initial page load
             self.driver.save_screenshot("screenshots/initial_page_load.png")
             
-            # Basic profile data dictionary
             profile_data = {
                 'profile_url': profile_url,
                 'profile_id': profile_url.split('/in/')[-1].split('/')[0].replace('/', '')
             }
             
-            # Scroll slowly to ensure all content loads
             logger.info("Scrolling page to ensure content loads...")
-            self.driver.execute_script("window.scrollTo(0, 0);")  # First go to top
-            time.sleep(1)
-            
-            # Scroll down in small increments
-            total_height = self.driver.execute_script("return document.body.scrollHeight")
-            for i in range(10):  # Scroll in 10 increments
-                scroll_height = total_height * (i + 1) / 10
-                self.driver.execute_script(f"window.scrollTo(0, {scroll_height});")
-                time.sleep(0.5)  # Short pause between scrolls
-            
-            # Go back to top for extraction
             self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(1)
             
-            # Take screenshot after scrolling
+            total_height = int(self.driver.execute_script("return document.body.scrollHeight"))
+            for i in range(1, int(total_height / 500) + 2): # Scroll in 500px chunks
+                self.driver.execute_script(f"window.scrollTo(0, {i*500});")
+                time.sleep(random.uniform(0.5, 1.0))
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);") # Scroll to very bottom
+            time.sleep(random.uniform(1,2))
+            self.driver.execute_script("window.scrollTo(0, 0);") # Scroll back to top
+            time.sleep(1)
+            
             self.driver.save_screenshot("screenshots/after_scrolling.png")
+
+            # Expand sections like "Show more" for About, Experience, etc.
+            self.expand_sections()
             
-            # Extract name - special focus on this
-            logger.info("Extracting name (special focus)...")
-            # First make sure we're at the top of the page
-            self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(1)
-            
-            # Try to use our enhanced name extraction
+            # Extract name
             name_data = self.extract_name()
-            if name_data["name"]:
-                logger.info(f"Successfully extracted name: {name_data['name']}")
-                profile_data.update(name_data)
-            else:
-                logger.warning("Enhanced name extraction failed, trying direct methods...")
-                
-                # Direct method 1: Try finding h1 elements anywhere
-                try:
-                    h1_elements = self.driver.find_elements(By.TAG_NAME, "h1")
-                    if h1_elements and len(h1_elements) > 0:
-                        for h1_element in h1_elements: # Renamed h1 to h1_element to avoid conflict with selector
-                            text = h1_element.text.strip()
-                            if text:
-                                logger.info(f"Found h1 with text: {text}")
-                                profile_data['name'] = text
-                                
-                                # Try to split into first/last name
-                                name_parts = text.split()
-                                if len(name_parts) >= 2:
-                                    profile_data['first_name'] = name_parts[0]
-                                    profile_data['last_name'] = ' '.join(name_parts[1:])
-                                else:
-                                    profile_data['first_name'] = text
-                                    profile_data['last_name'] = ""
-                                break
-                except Exception as h1_err:
-                    logger.error(f"Error in direct h1 extraction: {h1_err}")
+            profile_data.update(name_data)
             
-            # Save full page source for debugging
-            with open("screenshots/full_page_source.html", "w", encoding="utf-8") as f:
-                f.write(self.driver.page_source)
-                
-            # Continue with other extractions
+            # Save full page source for debugging if name extraction is problematic
+            if not profile_data.get("name"):
+                with open("screenshots/full_page_source_no_name.html", "w", encoding="utf-8") as f:
+                    f.write(self.driver.page_source)
             
             # Extract headline/title
-            title = self.extract_headline()
-            if title:
-                profile_data['title'] = title
+            profile_data['headline'] = self.extract_headline()
             
             # Extract location
-            location = self.extract_location()
-            if location:
-                profile_data['location'] = location
+            profile_data['location'] = self.extract_location()
             
             # Extract about/bio section
-            about = self.extract_about()
-            if about:
-                profile_data['introduction'] = about
+            profile_data['about'] = self.extract_about()
             
             # Extract experience
             experiences = self.extract_experience()
-            if experiences:
-                profile_data['experience'] = experiences
+            profile_data['experience'] = experiences
             
             # Extract education
             education = self.extract_education()
-            if education:
-                profile_data['education'] = education
+            profile_data['education'] = education
             
             # Extract skills
             skills = self.extract_skills()
-            if skills:
-                profile_data['skills'] = skills
+            profile_data['skills'] = skills
             
-            # Extract current company (either from experiences or directly)
+            # Extract current company
             current_company = self.extract_current_company(experiences)
             if current_company:
                 profile_data['current_company'] = current_company
                 
-            # Save the extracted data for debugging
             with open("screenshots/profile_data.json", "w", encoding="utf-8") as f:
                 json.dump(profile_data, f, indent=2)
                 
-            logger.info(f"Completed scraping profile data: {json.dumps(profile_data, indent=2)}")
+            logger.info(f"Completed scraping profile data: {profile_data.get('name', 'N/A')}")
             return profile_data
             
+        except TimeoutException:
+            logger.error(f"Timeout while loading profile: {profile_url}")
+            self.driver.save_screenshot("screenshots/scrape_timeout_error.png")
+            return {"error": "Timeout loading profile", "profile_url": profile_url}
         except Exception as e:
-            logger.error(f"Error scraping profile: {str(e)}")
-            self.driver.save_screenshot("screenshots/scrape_error.png")
-            return {"error": str(e), "profile_url": profile_url, "profile_id": profile_url.split('/in/')[-1].split('/')[0].replace('/', '')}
+            logger.error(f"Error scraping profile {profile_url}: {str(e)}", exc_info=True)
+            self.driver.save_screenshot("screenshots/scrape_general_error.png")
+            with open("screenshots/scrape_error_page.html", "w", encoding="utf-8") as f:
+                if self.driver:
+                    f.write(self.driver.page_source)
+            return {"error": str(e), "profile_url": profile_url}
             
     def close(self):
         """Close browser and clean up resources"""
@@ -896,5 +687,6 @@ def initialize(self):
         if self.driver:
             try:
                 self.driver.quit()
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Error quitting driver: {e}")
+            self.driver = None
