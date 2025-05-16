@@ -136,7 +136,55 @@ async def test_endpoint():
         "timestamp": str(datetime.datetime.now())
     }
 
-
+@router.get("/test-selenium")
+def test_selenium():
+    """Test Selenium setup"""
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+        import os
+        
+        # Create a custom cache directory
+        os.makedirs(".wdm", exist_ok=True)
+        
+        # Set environment variables
+        os.environ['WDM_LOCAL'] = '1'
+        os.environ['WDM_SSL_VERIFY'] = '0'
+        
+        # Install driver
+        driver_path = ChromeDriverManager(cache_valid_range=1).install()
+        
+        # Create options
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        
+        # Initialize Chrome
+        service = Service(executable_path=driver_path)
+        driver = webdriver.Chrome(service=service, options=options)
+        
+        # Test navigation
+        driver.get("https://www.google.com")
+        title = driver.title
+        
+        # Quit driver
+        driver.quit()
+        
+        return {
+            "status": "success",
+            "driver_path": driver_path,
+            "page_title": title
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 @router.post("/sync-scrape")
 def sync_scrape(
     request: ScrapeProfileRequest

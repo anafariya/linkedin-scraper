@@ -22,73 +22,90 @@ class LinkedInSeleniumScraper:
         self.driver = None
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
-    def initialize(self):
-        """Initialize the browser using webdriver-manager"""
-        logger.info("Initializing browser with webdriver-manager")
-        
+def initialize(self):
+    """Initialize the browser using webdriver_manager with specific cache"""
+    logger.info("Initializing browser with improved ChromeDriverManager setup")
+    
+    import platform
+    logger.info(f"OS: {platform.platform()}")
+    logger.info(f"Python: {platform.python_version()}")
+    
+    # Configure logging for webdriver-manager
+    import logging
+    logging.getLogger('WDM').setLevel(logging.INFO)
+    
+    options = Options()
+    if self.headless:
+        options.add_argument("--headless=new")
+    
+    # Enhanced options for Render environment
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # For Selenium 4.5.0 compatibility
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    # Create screenshots directory
+    os.makedirs("screenshots", exist_ok=True)
+    
+    try:
+        # Configure webdriver-manager with exact version and cache path
         from webdriver_manager.chrome import ChromeDriverManager
-        # from webdriver_manager.core.utils import ChromeType # Not used in this version
-        import platform
+        from webdriver_manager.core.utils import get_browser_version_from_os
+        from webdriver_manager.core.driver_cache import DriverCacheManager
         
-        logger.info(f"OS: {platform.platform()}")
-        logger.info(f"Python: {platform.python_version()}")
+        # Create a cache in the current directory which is writable
+        os.makedirs(".wdm", exist_ok=True)
+        cache_manager = DriverCacheManager(".wdm")
         
-        options = Options()
-        if self.headless:
-            options.add_argument("--headless=new")
+        # Set environment variables for webdriver-manager
+        os.environ['WDM_LOCAL'] = '1'
+        os.environ['WDM_SSL_VERIFY'] = '0'
         
-        # Enhanced options for Render environment
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        
-        # For Selenium 4.5.0 compatibility
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        
-        # Create screenshots directory
-        os.makedirs("screenshots", exist_ok=True)
-        
+        # Get specific chrome version info if available
+        browser_version = None
         try:
-            # Use webdriver-manager to handle driver installation
-            # from selenium.webdriver.chrome.service import Service # Already imported at top
-            
-            # Let webdriver-manager install the driver automatically
-            service = Service(ChromeDriverManager().install())
-            logger.info(f"Driver installed at: {service.path}")
-            
-            # Initialize driver with service
-            self.driver = webdriver.Chrome(service=service, options=options)
-            logger.info("Chrome initialized successfully with webdriver-manager")
-            
-            # Set script to disable webdriver detection
-            self.driver.execute_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => false,
-            });
-            """)
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error initializing Chrome: {e}")
-            # Try with explicit cache_valid_range
-            try:
-                logger.info("Trying with explicit cache_valid_range...")
-                # from webdriver_manager.chrome import ChromeDriverManager # Already imported
-                from webdriver_manager.core.driver_cache import DriverCacheManager
-                
-                cache_manager = DriverCacheManager()
-                service = Service(ChromeDriverManager(cache_manager=cache_manager, cache_valid_range=1).install())
-                self.driver = webdriver.Chrome(service=service, options=options)
-                logger.info("Chrome initialized with explicit cache settings")
-                return True
-            except Exception as retry_e:
-                logger.error(f"Retry initialization failed: {retry_e}")
-                raise e
-
+            browser_version = get_browser_version_from_os()
+            logger.info(f"Detected browser version: {browser_version}")
+        except:
+            logger.info("Could not detect browser version, using default")
+        
+        # Install driver with specific configuration
+        driver_path = ChromeDriverManager(
+            cache_manager=cache_manager,
+            version="latest",  # Use latest driver
+            cache_valid_range=1  # Force download if older than 1 day
+        ).install()
+        
+        logger.info(f"ChromeDriver installed at: {driver_path}")
+        
+        # Create service with explicit path
+        service = Service(executable_path=driver_path)
+        
+        # Initialize driver
+        self.driver = webdriver.Chrome(service=service, options=options)
+        logger.info("Chrome initialized successfully with configured webdriver-manager")
+        
+        # Set script to disable webdriver detection
+        self.driver.execute_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => false,
+        });
+        """)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing Chrome: {e}")
+        # If we have detailed error info, log it
+        if hasattr(e, 'msg'):
+            logger.error(f"Error message: {e.msg}")
+        
+        raise e
     def login(self, email, password):
         """Login to LinkedIn with provided credentials"""
         try:
